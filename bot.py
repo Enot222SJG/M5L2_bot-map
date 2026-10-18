@@ -7,21 +7,72 @@ bot = telebot.TeleBot(TOKEN)
 manager = DB_Map(DATABASE)
 manager.create_user_table()
 
+AVAILABLE_COLORS = {
+    'красный': 'red',
+    'синий': 'blue',
+    'зелёный': 'green',
+    'зеленый': 'green',
+    'жёлтый': 'yellow',
+    'желтый': 'yellow',
+    'оранжевый': 'orange',
+    'фиолетовый': 'purple',
+    'чёрный': 'black',
+    'черный': 'black',
+    'белый': 'white',
+    'розовый': 'pink',
+    'red': 'red',
+    'blue': 'blue',
+    'green': 'green',
+    'yellow': 'yellow',
+    'orange': 'orange',
+    'purple': 'purple',
+    'black': 'black',
+    'white': 'white',
+    'pink': 'pink',
+}
+
+
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     bot.send_message(message.chat.id,
-                     "Привет! Я бот, который может показывать города на карте.\n"
+                     "Привет! Я бот, который показывает города на карте.\n"
+                     "Можно писать названия городов на русском или английском.\n"
                      "Напиши /help для списка команд.")
+
 
 @bot.message_handler(commands=['help'])
 def handle_help(message):
     bot.send_message(message.chat.id,
-                     "Доступные команды:\n"
-                     "/start — начать работу с ботом\n"
+                     "Доступные команды:\n\n"
+                     "/start — запуск бота\n"
                      "/help — список команд\n"
                      "/show_city <город> — показать город на карте\n"
                      "/remember_city <город> — сохранить город\n"
-                     "/show_my_cities — показать все сохранённые города на карте")
+                     "/show_my_cities — все сохранённые города на карте\n"
+                     "/set_color <цвет> — выбрать цвет маркеров\n\n"
+                     "Города можно писать на русском: /show_city Москва")
+
+
+@bot.message_handler(commands=['set_color'])
+def handle_set_color(message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        colors_list = ', '.join(sorted(set(AVAILABLE_COLORS.values())))
+        bot.send_message(message.chat.id,
+                         f"Укажи цвет после команды.\n"
+                         f"Доступные цвета: {colors_list}\n"
+                         f"Можно на русском: /set_color красный")
+        return
+
+    color_input = parts[1].strip().lower()
+    color = AVAILABLE_COLORS.get(color_input)
+
+    if not color:
+        bot.send_message(message.chat.id, "Такого цвета нет. Напиши /set_color чтобы увидеть список.")
+        return
+
+    manager.set_color(message.chat.id, color)
+    bot.send_message(message.chat.id, f"Цвет маркеров изменён на {color}!")
 
 
 @bot.message_handler(commands=['show_city'])
@@ -29,8 +80,8 @@ def handle_show_city(message):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         bot.send_message(message.chat.id,
-                         "Укажи название города после команды.\n"
-                         "Пример: /show_city London")
+                         "Укажи город после команды.\n"
+                         "Пример: /show_city Лондон")
         return
 
     city_name = parts[1].strip()
@@ -38,12 +89,12 @@ def handle_show_city(message):
 
     if not coords:
         bot.send_message(message.chat.id,
-                         "Такого города я не знаю. Убедись, что он написан на английском!")
+                         "Такого города я не знаю. Попробуй другое написание.")
         return
 
-    # Генерируем карту с одним городом
+    color = manager.get_color(message.chat.id)
     path = f"map_{message.chat.id}.png"
-    result = manager.create_grapf(path, [city_name])
+    result = manager.create_grapf(path, [city_name], marker_color=color)
 
     if result:
         with open(path, 'rb') as photo:
@@ -59,16 +110,18 @@ def handle_remember_city(message):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         bot.send_message(message.chat.id,
-                         "Укажи название города после команды.\n"
-                         "Пример: /remember_city London")
+                         "Укажи город после команды.\n"
+                         "Пример: /remember_city Париж")
         return
 
     city_name = parts[1].strip()
-    if manager.add_city(user_id, city_name):
-        bot.send_message(message.chat.id, f'Город {city_name} успешно сохранен!')
+    result = manager.add_city(user_id, city_name)
+    if result:
+        bot.send_message(message.chat.id, f'Город {city_name} ({result}) сохранён!')
     else:
         bot.send_message(message.chat.id,
-                         'Такого города я не знаю. Убедись, что он написан на английском!')
+                         'Такого города я не знаю. Попробуй другое написание.')
+
 
 @bot.message_handler(commands=['show_my_cities'])
 def handle_show_visited_cities(message):
@@ -80,9 +133,9 @@ def handle_show_visited_cities(message):
                          "Используй /remember_city <город>, чтобы добавить.")
         return
 
-    # Генерируем карту со всеми городами пользователя
+    color = manager.get_color(message.chat.id)
     path = f"map_{message.chat.id}.png"
-    result = manager.create_grapf(path, cities)
+    result = manager.create_grapf(path, cities, marker_color=color)
 
     if result:
         city_list = ", ".join(cities)

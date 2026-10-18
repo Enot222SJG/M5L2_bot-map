@@ -1,3 +1,4 @@
 pytelegrambotapi
 matplotlib
 cartopy
+googletrans==4.0.0-rc1
