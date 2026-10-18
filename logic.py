@@ -75,6 +75,11 @@ class DB_Map():
                                 user_id INTEGER PRIMARY KEY,
                                 marker_color TEXT DEFAULT 'red'
                             )''')
+            # Кэш переводов названий городов на русский
+            conn.execute('''CREATE TABLE IF NOT EXISTS city_names_ru (
+                                city TEXT PRIMARY KEY,
+                                city_ru TEXT
+                            )''')
             conn.commit()
 
     def set_color(self, user_id, color):
@@ -106,6 +111,30 @@ class DB_Map():
             except Exception:
                 return city_name
         return city_name
+
+    def translate_city_ru(self, city_name):
+        """Возвращает русское название города (с кэшем в базе)."""
+        if any('а' <= c.lower() <= 'я' or c.lower() == 'ё' for c in city_name):
+            return city_name
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT city_ru FROM city_names_ru WHERE city=?', (city_name,))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+        try:
+            result = self.translator.translate(city_name, src='en', dest='ru')
+            city_ru = result.text.strip()
+        except Exception:
+            return city_name
+        if not city_ru:
+            return city_name
+        with conn:
+            conn.execute('INSERT OR IGNORE INTO city_names_ru VALUES (?, ?)',
+                         (city_name, city_ru))
+            conn.commit()
+        return city_ru
 
     def add_city(self, user_id, city_name):
         city_name_en = self.translate_city(city_name)
@@ -295,7 +324,7 @@ class DB_Map():
                 if lat is not None and lng is not None:
                     latitudes.append(lat)
                     longitudes.append(lng)
-                    labels.append(city)
+                    labels.append(self.translate_city_ru(city))
 
         if not latitudes:
             return False
@@ -326,17 +355,18 @@ class DB_Map():
 
         marker_size = 80 if len(latitudes) <= 15 else 30
         label_size = 8 if len(latitudes) <= 15 else 5
-        offset = max(lat_span, lon_span) * 0.02 + 0.5
+        offset = max(lat_span, lon_span) * 0.012 + 0.3
 
         # Маркеры городов
         ax.scatter(longitudes, latitudes, color=marker_color, s=marker_size,
                    edgecolors='black', linewidths=0.5, zorder=5,
                    transform=ccrs.PlateCarree())
 
-        # Подписи
+        # Подписи прямо над точками
         for lon, lat, name in zip(longitudes, latitudes, labels):
-            ax.text(lon + offset, lat + offset, name, fontsize=label_size,
-                    fontweight='bold', transform=ccrs.PlateCarree())
+            ax.text(lon, lat + offset, name, fontsize=label_size,
+                    fontweight='bold', ha='center', va='bottom',
+                    transform=ccrs.PlateCarree())
 
         plt.title(f'Карта городов ({len(latitudes)} шт.)', fontsize=14)
         plt.savefig(path, bbox_inches='tight', dpi=150)
