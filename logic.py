@@ -1,12 +1,17 @@
 import sqlite3
 from config import *
+import warnings
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from cartopy.io import DownloadWarning
 from googletrans import Translator
 import requests
+
+warnings.filterwarnings('ignore', category=DownloadWarning)
+warnings.filterwarnings('ignore', message='facecolor will have no effect')
 
 RU_COUNTRIES = {
     'россия': 'Russia', 'япония': 'Japan', 'франция': 'France',
@@ -337,6 +342,16 @@ class DB_Map():
         plt.savefig(path, bbox_inches='tight', dpi=150)
         plt.close(fig)
         return True
+
+
+def preload_map_data():
+    """Заранее скачивает картографические данные Natural Earth в кэш cartopy."""
+    try:
+        for feature in (cfeature.OCEAN, cfeature.LAND, cfeature.COASTLINE,
+                        cfeature.BORDERS, cfeature.RIVERS, cfeature.LAKES):
+            list(feature.geometries())
+    except Exception as e:
+        print(f"Не удалось скачать картографические данные: {e}")
 
 
 if __name__ == "__main__":

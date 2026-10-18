@@ -318,4 +318,7 @@ def handle_time(message):
 
 if __name__ == "__main__":
     print("Бот запущен...")
+    print("Проверяю картографические данные (при первом запуске могу скачать)...")
+    preload_map_data()
+    print("Готово. Ожидаю сообщений...")
     bot.polling()
